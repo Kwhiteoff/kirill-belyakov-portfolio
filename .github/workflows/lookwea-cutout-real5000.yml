@@ -1,0 +1,50 @@
+name: LookWea CUTOUT real5000 10 cycles
+
+on:
+  push:
+    branches:
+      - tmp/lookwea-cutout-real5000-10cycles-20261006
+    paths:
+      - 'tools/lookwea-cutout-real5000/**'
+      - '.github/workflows/lookwea-cutout-real5000.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.7.1
+          python -m pip install numpy==2.2.6 pillow==11.2.1 pycocotools==2.0.10 onnx==1.18.0
+      - name: Download official Fashionpedia
+        run: |
+          mkdir -p .lookwea/data .lookwea/work .lookwea/out
+          curl -fL --retry 3 --retry-delay 5 --progress-bar             https://s3.amazonaws.com/ifashionist-dataset/images/train2020.zip             -o .lookwea/data/train2020.zip
+          curl -fL --retry 3 --retry-delay 5 --progress-bar             https://s3.amazonaws.com/ifashionist-dataset/annotations/instances_attributes_train2020.json             -o .lookwea/data/instances_attributes_train2020.json
+          ls -lh .lookwea/data
+      - name: Train 10 cycles on exactly 5000 real images
+        run: |
+          python tools/lookwea-cutout-real5000/train_10cycles.py             --zip .lookwea/data/train2020.zip             --annotations .lookwea/data/instances_attributes_train2020.json             --work .lookwea/work             --out .lookwea/out
+      - name: Show final metrics
+        if: always()
+        run: |
+          test -f .lookwea/out/FINAL_REAL5000_METRICS.json && cat .lookwea/out/FINAL_REAL5000_METRICS.json || true
+      - name: Upload result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LookWea_CUTOUT_REAL5000_10cycles
+          path: .lookwea/out/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
